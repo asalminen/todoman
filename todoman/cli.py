@@ -213,7 +213,7 @@ def list(ctx, lists, all, urgent, location, category, grep):
         try:
             print("{:02d} {}".format(
                 index,
-                ctx.obj['formatter'].compact(todo, database)
+                ctx.obj['formatter'].detailed(todo, database)
             ))
         except Exception as e:
             print("Error while showing {}: {}"

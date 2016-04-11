@@ -179,7 +179,11 @@ class TodoFormatter:
         """
         rv = self.compact(todo, database)
         if todo.description:
-            rv = "{}\n\n{}".format(rv, todo.description)
+            #rv = "{}\n{}".format(rv, todo.description)
+            lines = todo.description.split('\n')
+            rv = rv + '\n';
+            for line in lines:
+                rv = rv + "      " + line + '\n'
         return rv
 
     def format_date(self, date):

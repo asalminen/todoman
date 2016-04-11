@@ -129,7 +129,7 @@ class TodoFormatter:
 
     # This one looks good with [X]
     compact_format = \
-        "[{completed}] {urgent} {due} {summary} {list}{percent}"
+        "[{completed}] {summary} {urgent} {due} {percent}"
     # compact_format = "{completed} {urgent}  {due}  {summary}"
 
     def __init__(self, date_format, human_time):

@@ -211,7 +211,7 @@ def list(ctx, lists, all, urgent, location, category, grep):
     for index, (database, todo) in enumerate(todos, start=1):
         ids[index] = (database.name, todo.filename)
         try:
-            print("{:2d} {}".format(
+            print("{:02d} {}".format(
                 index,
                 ctx.obj['formatter'].compact(todo, database)
             ))

@@ -130,6 +130,24 @@ def show(ctx, id):
 
 @cli.command()
 @click.pass_context
+@click.argument('subid', nargs=2, required=True, type=int)
+def subdone(ctx, subid):
+    '''
+    Mark a subtask as done.
+    '''
+    todo, database = get_todo(ctx.obj['db'], subid[0])
+
+    if todo.description:
+        lines = todo.description.split('\n')
+        lines[subid[1]] = lines[subid[1]].replace( '[ ]', '[x]' )
+        todo.description = '\n'.join(lines)
+        database.save(todo)
+
+    print(ctx.obj['formatter'].detailed(todo, database))
+
+
+@cli.command()
+@click.pass_context
 @click.argument('ids', nargs=-1, required=True, type=click.IntRange(0))
 def done(ctx, ids):
     '''

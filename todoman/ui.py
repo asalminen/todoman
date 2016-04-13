@@ -9,6 +9,12 @@ import urwid
 from dateutil.tz import tzlocal
 
 
+class EditState:
+    none = object()
+    saved = object()
+    deleted = object()
+
+
 class TodoEditor:
     """
     The UI for a single todo entry.
@@ -22,7 +28,7 @@ class TodoEditor:
         self.todo = todo
         self.databases = databases
         self.formatter = formatter
-        self.saved = False
+        self.saved = EditState.none
 
         if todo.due:
             # TODO: use proper date_format
@@ -39,9 +45,10 @@ class TodoEditor:
         self._urgent = urwid.CheckBox("", state=todo.priority != 0)
 
         save_btn = urwid.Button('Save', on_press=self._save)
+        delete_btn = urwid.Button('Delete', on_press=self._delete)
         cancel_btn = urwid.Button('Cancel', on_press=self._cancel)
-        buttons = urwid.Columns([(10, cancel_btn), (8, save_btn)],
-                                dividechars=2)
+        buttons = urwid.Columns([(10, cancel_btn), (8, save_btn),
+                                 (10, delete_btn)], dividechars=2)
 
         pile_items = []
         for label, field in [("Summary", self._summary),
@@ -98,7 +105,11 @@ class TodoEditor:
         # geo (lat, lon)
         # RESOURCE: the main room
 
-        self.saved = True
+        self.saved = EditState.saved
+        raise urwid.ExitMainLoop()
+
+    def _delete(self, btn):
+        self.saved = EditState.deleted
         raise urwid.ExitMainLoop()
 
     def _cancel(self, btn):

@@ -139,7 +139,7 @@ def subdone(ctx, subid):
 
     if todo.description:
         lines = todo.description.split('\n')
-        lines[subid[1]] = lines[subid[1]].replace( '[ ]', '[x]' )
+        lines[subid[1]-1] = lines[subid[1]-1].replace( '[ ]', '[x]' )
         todo.description = '\n'.join(lines)
         database.save(todo)
 

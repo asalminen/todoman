@@ -182,7 +182,7 @@ class TodoFormatter:
         if todo.description:
             rv = "{}\n".format(rv)
             lines = todo.description.split('\n')
-            for index, line in enumerate(lines):
+            for index, line in enumerate(lines, start=1):
                 rv = "{}      {:02d} {}\n".format( rv, index, line )
         return rv
 

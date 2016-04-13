@@ -185,17 +185,24 @@ def _abort_if_false(ctx, param, value):
 @cli.command()
 @click.pass_context
 @click.confirmation_option(
-    help='Are you sure you want to delete all done tasks?'
+    help='Are you sure you want to delete all done tasks and subtasks?'
 )
 def flush(ctx):
     '''
-    Delete done tasks.
+    Delete done tasks and subtasks.
     '''
     for database in ctx.obj['db'].values():
         for todo in database.todos.values():
             if todo.is_completed:
                 click.echo('Deleting {} ({})'.format(todo.uid, todo.summary))
                 database.delete(todo)
+            else:
+                if todo.description:
+                    lines = todo.description.split('\n')
+                    newlines = [line for line in lines if not line.startswith("[x]")]
+                    if len(newlines) < len(lines):
+                        todo.description = '\n'.join(newlines)
+                        database.save(todo)
 
 
 @cli.command()

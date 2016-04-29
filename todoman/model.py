@@ -63,6 +63,9 @@ class Todo:
             self.todo.add('priority', 0)
             self.todo.add('created', now)
 
+        if self.todo.get('dtstamp', None) is None:
+            self.todo.add('dtstamp', datetime.utcnow())
+
         self.filename = filename or "{}.ics".format(self.todo.get('uid'))
 
     def _set_field(self, name, value):
@@ -119,7 +122,7 @@ class Todo:
     @property
     def categories(self):
         categories = self.todo.get('categories', '').split(',')
-        return filter(None, categories)
+        return tuple(filter(None, categories))
 
     @categories.setter
     def categories(self, categories):
@@ -188,6 +191,10 @@ class Todo:
     @property
     def uid(self):
         return self.todo.get('uid')
+
+    @property
+    def dtstamp(self):
+        return self.todo.decoded('dtstamp')
 
     def _normalize_datetime(self, x):
         '''

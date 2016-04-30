@@ -142,9 +142,9 @@ def newsub(ctx, id, summary):
     '''
     todo, database = get_todo(ctx.obj['db'], id)
     if todo.description:
-        todo.description = todo.description + "\n[ ] %s"%(summary)
+        todo.description = todo.description + "\n[ ] %s"%(' '.join(summary))
     else:
-        todo.description = "[ ] %s"%(summary)
+        todo.description = "[ ] %s"%(' '.join(summary))
     database.save(todo)
 
     print(ctx.obj['formatter'].detailed(todo, database))

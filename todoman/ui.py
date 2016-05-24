@@ -148,7 +148,7 @@ class TodoFormatter:
         self.date_format = date_format
         self._localtimezone = tzlocal()
         self.now = datetime.now().replace(tzinfo=self._localtimezone)
-        #self.empty_date = " " * len(self.format_date(self.now))
+        # self.empty_date = " " * len(self.format_date(self.now))
         self.empty_date = ""
 
         if human_time:
@@ -194,7 +194,7 @@ class TodoFormatter:
             rv = "{}\n".format(rv)
             lines = todo.description.split('\n')
             for index, line in enumerate(lines, start=1):
-                rv = "{}      {:02d} {}\n".format( rv, index, line )
+                rv = "{}      {:02d} {}\n".format(rv, index, line)
         return rv
 
     def format_date(self, date):

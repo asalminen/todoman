@@ -21,7 +21,7 @@ def _validate_lists_param(ctx, param=None, lists=None):
 
 
 def _validate_list_param(ctx, param=None, name=None):
-    if name == None and len(ctx.obj['db'])==1:
+    if name is None and len(ctx.obj['db']) == 1:
         for name in ctx.obj['db']:
             break
     if name in ctx.obj['db']:
@@ -160,9 +160,9 @@ def newsub(ctx, id, summary):
     '''
     todo, database = get_todo(ctx.obj['db'], id)
     if todo.description:
-        todo.description = todo.description + "\n[ ] %s"%(' '.join(summary))
+        todo.description = todo.description + "\n[ ] %s" % (' '.join(summary))
     else:
-        todo.description = "[ ] %s"%(' '.join(summary))
+        todo.description = "[ ] %s" % (' '.join(summary))
     database.save(todo)
 
     print(ctx.obj['formatter'].detailed(todo, database))
@@ -179,7 +179,7 @@ def donesub(ctx, subid):
 
     if todo.description:
         lines = todo.description.split('\n')
-        lines[subid[1]-1] = lines[subid[1]-1].replace( '[ ]', '[x]' )
+        lines[subid[1]-1] = lines[subid[1]-1].replace('[ ]', '[x]')
         todo.description = '\n'.join(lines)
         database.save(todo)
 
@@ -221,7 +221,8 @@ def flush(ctx):
             else:
                 if todo.description:
                     lines = todo.description.split('\n')
-                    newlines = [line for line in lines if not line.startswith("[x]")]
+                    newlines = \
+                        [line for line in lines if not line.startswith("[x]")]
                     if len(newlines) < len(lines):
                         todo.description = '\n'.join(newlines)
                         database.save(todo)

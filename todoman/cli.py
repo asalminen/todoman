@@ -20,6 +20,9 @@ def _validate_lists_param(ctx, param=None, lists=None):
 
 
 def _validate_list_param(ctx, param=None, name=None):
+    if name == None and len(ctx.obj['db'])==1:
+        for name in ctx.obj['db']:
+            break
     if name in ctx.obj['db']:
         return ctx.obj['db'][name]
     else:
@@ -89,7 +92,7 @@ except ImportError:
 @cli.command()
 @click.argument('summary', nargs=-1)
 @click.option('--list', '-l', callback=_validate_list_param,
-              help='The list to create the task in.', required=True)
+              help='The list to create the task in.', default=None)
 @click.option('--due', '-d', default='', callback=_validate_due_param,
               help=('The due date of the task, in the format specified in the '
                     'configuration file.'))

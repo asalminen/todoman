@@ -5,7 +5,6 @@ from os.path import normpath, split
 from uuid import uuid4
 
 import icalendar
-from ansi.colour.rgb import rgb8
 from atomicwrites import AtomicWriter
 from dateutil.tz import tzlocal
 
@@ -204,7 +203,7 @@ class Todo:
         - Convert everything to datetime
         - Add missing timezones
         '''
-        if isinstance(x, date):
+        if isinstance(x, date) and not isinstance(x, datetime):
             x = datetime(x.year, x.month, x.day)
         elif isinstance(x, time):
             x = datetime.combine(date.today(), x)
@@ -305,7 +304,7 @@ class Database:
     def color_ansi(self):
         rv = self.color_rgb
         if rv:
-            return rgb8(*rv)
+            return '\33[38;2;{!s};{!s};{!s}m'.format(*rv)
 
     def __str__(self):
         return self.name

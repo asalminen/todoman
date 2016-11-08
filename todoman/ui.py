@@ -1,18 +1,21 @@
 from datetime import datetime
 from time import mktime
+import click
 
-import ansi.colour.fg
-import ansi.colour.fx
-import ansi.sequence
 import parsedatetime
 import urwid
 from dateutil.tz import tzlocal
+
+from . import widgets
+
+_palette = [
+    ('error', 'light red', '')
+]
 
 
 class EditState:
     none = object()
     saved = object()
-    deleted = object()
 
 
 class TodoEditor:
@@ -29,6 +32,9 @@ class TodoEditor:
         self.databases = databases
         self.formatter = formatter
         self.saved = EditState.none
+        self._loop = None
+
+        self._msg_text = urwid.Text('')
 
         if todo.due:
             # TODO: use proper date_format
@@ -36,19 +42,24 @@ class TodoEditor:
         else:
             due = ""
 
-        self._summary = urwid.Edit(edit_text=todo.summary)
-        self._description = urwid.Edit(edit_text=todo.description,
-                                       multiline=True)
-        self._location = urwid.Edit(edit_text=todo.location)
-        self._due = urwid.Edit(edit_text=due)
+        self._summary = widgets.ExtendedEdit(parent=self,
+                                             edit_text=todo.summary)
+        self._description = widgets.ExtendedEdit(
+            parent=self,
+            edit_text=todo.description,
+            multiline=True,
+        )
+        self._location = widgets.ExtendedEdit(
+            parent=self,
+            edit_text=todo.location
+        )
+        self._due = widgets.ExtendedEdit(parent=self, edit_text=due)
         self._completed = urwid.CheckBox("", state=todo.is_completed)
         self._urgent = urwid.CheckBox("", state=todo.priority != 0)
 
         save_btn = urwid.Button('Save', on_press=self._save)
-        delete_btn = urwid.Button('Delete', on_press=self._delete)
-        cancel_btn = urwid.Button('Cancel', on_press=self._cancel)
-        buttons = urwid.Columns([(10, cancel_btn), (8, save_btn),
-                                 (10, delete_btn)], dividechars=2)
+        cancel_text = urwid.Text('Hit Ctrl-C to cancel.')
+        buttons = urwid.Columns([(8, save_btn), cancel_text], dividechars=2)
 
         pile_items = []
         for label, field in [("Summary", self._summary),
@@ -65,21 +76,45 @@ class TodoEditor:
         grid = urwid.Pile(pile_items)
         spacer = urwid.Divider()
 
-        items = [grid, spacer, buttons]
+        items = [grid, spacer, self._msg_text, buttons]
 
         self._ui = urwid.ListBox(items)
+
+    def message(self, text):
+        self._msg_text.set_text(text)
 
     def edit(self):
         """
         Shows the UI for editing a given todo. Returns True if modifications
         were saved.
         """
-        loop = urwid.MainLoop(self._ui, unhandled_input=self._keypress,
-                              handle_mouse=False)
-        loop.run()
+        self._loop = urwid.MainLoop(
+            self._ui,
+            palette=_palette,
+            unhandled_input=self._keypress,
+            handle_mouse=False,
+        )
+        try:
+            self._loop.run()
+        except Exception:
+            try:  # Try to leave terminal in usable state
+                self._loop.stop()
+            except Exception:
+                pass
+            raise
+        self._loop = None
         return self.saved
 
     def _save(self, btn):
+        try:
+            self._save_inner()
+        except Exception as e:
+            self.message(('error', str(e)))
+        else:
+            self.saved = EditState.saved
+            raise urwid.ExitMainLoop()
+
+    def _save_inner(self):
         self.todo.summary = self.summary
         self.todo.description = self.description
         self.todo.location = self.location
@@ -104,13 +139,6 @@ class TodoEditor:
         # https://tools.ietf.org/html/rfc5545#section-3.8
         # geo (lat, lon)
         # RESOURCE: the main room
-
-        self.saved = EditState.saved
-        raise urwid.ExitMainLoop()
-
-    def _delete(self, btn):
-        self.saved = EditState.deleted
-        raise urwid.ExitMainLoop()
 
     def _cancel(self, btn):
         raise urwid.ExitMainLoop()
@@ -170,11 +198,7 @@ class TodoFormatter:
 
         due = self.format_date(todo.due)
         if todo.due and todo.due <= self.now and not todo.is_completed:
-            due = '{}{}{}'.format(
-                ansi.colour.fg.red,
-                due,
-                ansi.colour.fx.reset
-            )
+            due = click.style(due, fg='red')
 
         summary = todo.summary
         list = self.format_database(database)
@@ -224,6 +248,5 @@ class TodoFormatter:
             return None
 
     def format_database(self, database):
-        return '{}@{}{}'.format(database.color_ansi or '',
-                                database.name,
-                                ansi.colour.fx.reset)
+        return '{}@{}'.format(database.color_ansi or '',
+                              click.style(database.name))

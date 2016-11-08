@@ -107,9 +107,50 @@ def test_delete(tmpdir, runner, create):
     result = runner.invoke(cli, ['list'])
     assert not result.exception
     result = runner.invoke(cli, ['delete', '1', '--yes'])
+    assert not result.exception
     result = runner.invoke(cli, ['list'])
     assert not result.exception
     assert len(result.output.splitlines()) == 0
+
+
+def test_copy(tmpdir, runner, create):
+    tmpdir.mkdir('other_list')
+    create(
+        'test.ics',
+        'SUMMARY:test_copy\n'
+    )
+    result = runner.invoke(cli, ['list'])
+    assert not result.exception
+    assert 'test_copy' in result.output
+    assert 'default' in result.output
+    assert 'other_list' not in result.output
+    result = runner.invoke(cli, ['copy', '-l', 'other_list', '1'])
+    assert not result.exception
+    result = runner.invoke(cli, ['list'])
+    assert not result.exception
+    assert 'test_copy' in result.output
+    assert 'default' in result.output
+    assert 'other_list' in result.output
+
+
+def test_move(tmpdir, runner, create):
+    tmpdir.mkdir('other_list')
+    create(
+        'test.ics',
+        'SUMMARY:test_move\n'
+    )
+    result = runner.invoke(cli, ['list'])
+    assert not result.exception
+    assert 'test_move' in result.output
+    assert 'default' in result.output
+    assert 'other_list' not in result.output
+    result = runner.invoke(cli, ['move', '-l', 'other_list', '1'])
+    assert not result.exception
+    result = runner.invoke(cli, ['list'])
+    assert not result.exception
+    assert 'test_move' in result.output
+    assert 'default' not in result.output
+    assert 'other_list' in result.output
 
 
 def test_dtstamp(tmpdir, runner, create):
@@ -123,6 +164,24 @@ def test_dtstamp(tmpdir, runner, create):
     todo = list(db.todos.values())[0]
     assert todo.dtstamp is not None
     assert todo.dtstamp.tzinfo is pytz.utc
+
+
+def test_default_list(tmpdir, runner, create):
+    """
+    Test the default_list config parameter
+    """
+    result = runner.invoke(cli, ['new', 'test default list'])
+    assert result.exception
+
+    path = tmpdir.join('config')
+    path.write('default_list = default\n', 'a')
+
+    result = runner.invoke(cli, ['new', 'test default list'])
+    assert not result.exception
+
+    db = Database(str(tmpdir + '/default'))
+    todo = list(db.todos.values())[0]
+    assert todo.summary == 'test default list'
 
 
 def test_sorting_fields(tmpdir, runner, default_database):
@@ -207,6 +266,28 @@ def test_sorting_null_values(tmpdir, runner, create):
     assert not result.exception
     assert 'bbb' in result.output.splitlines()[0]
     assert 'aaa' in result.output.splitlines()[1]
+
+
+@pytest.mark.parametrize('hours', [1, -1])
+def test_color_due_dates(tmpdir, runner, create, hours):
+    due = datetime.datetime.now() + datetime.timedelta(hours=hours)
+    create(
+        'test.ics',
+        'SUMMARY:aaa\n'
+        'STATUS:IN-PROGRESS\n'
+        'DUE;VALUE=DATE-TIME;TZID=ART:{}\n'
+        .format(due.strftime('%Y%m%dT%H%M%S'))
+    )
+
+    result = runner.invoke(cli, ['--color', 'always'])
+    assert not result.exception
+    due_str = due.strftime('%Y-%m-%d')
+    if hours == 1:
+        assert result.output == \
+            ' 1 [ ]   {} aaa @default\x1b[0m\n'.format(due_str)
+    else:
+        assert result.output == \
+            ' 1 [ ]   \x1b[31m{}\x1b[0m aaa @default\x1b[0m\n'.format(due_str)
 
 
 # TODO: test aware/naive datetime sorting

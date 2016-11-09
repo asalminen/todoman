@@ -1,3 +1,9 @@
+About this Todoman fork
+=======================
+Quick hacks for todoman to work better with Android OpenTasks ( installed from F-Droid). OpenTasks has subtasks in description thus changing output to better fit for subtasks in description. There is no description merge in vsyncdir nor in davdroid thus there is hasard of conflicts if subtasks are changed in two palces before sync.
+
+To Install use: pip install git+git://github.com/asalminen/todoman.git
+
 Todoman
 =======
 

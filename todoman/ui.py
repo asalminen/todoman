@@ -1,7 +1,7 @@
 from datetime import datetime
 from time import mktime
-import click
 
+import click
 import parsedatetime
 import urwid
 from dateutil.tz import tzlocal
@@ -42,6 +42,12 @@ class TodoEditor:
         else:
             due = ""
 
+        if todo.start:
+            # TODO: use proper date_format
+            dtstart = formatter.format_date(todo.start)
+        else:
+            dtstart = ''
+
         self._summary = widgets.ExtendedEdit(parent=self,
                                              edit_text=todo.summary)
         self._description = widgets.ExtendedEdit(
@@ -54,11 +60,12 @@ class TodoEditor:
             edit_text=todo.location
         )
         self._due = widgets.ExtendedEdit(parent=self, edit_text=due)
+        self._dtstart = widgets.ExtendedEdit(parent=self, edit_text=dtstart)
         self._completed = urwid.CheckBox("", state=todo.is_completed)
         self._urgent = urwid.CheckBox("", state=todo.priority != 0)
 
         save_btn = urwid.Button('Save', on_press=self._save)
-        cancel_text = urwid.Text('Hit Ctrl-C to cancel.')
+        cancel_text = urwid.Text('Hit Ctrl-C to cancel, F1 for help.')
         buttons = urwid.Columns([(8, save_btn), cancel_text], dividechars=2)
 
         pile_items = []
@@ -66,6 +73,7 @@ class TodoEditor:
                              ("Description", self._description),
                              ("Location", self._location),
                              ("Due", self._due),
+                             ("Start", self._dtstart),
                              ("Completed", self._completed),
                              ("Urgent", self._urgent),
                              ]:
@@ -76,9 +84,24 @@ class TodoEditor:
         grid = urwid.Pile(pile_items)
         spacer = urwid.Divider()
 
-        items = [grid, spacer, self._msg_text, buttons]
-
+        self._ui_content = items = [grid, spacer, self._msg_text, buttons]
         self._ui = urwid.ListBox(items)
+
+        self._help_text = urwid.Text(
+            '\n\nGlobal:\n'
+            ' F1: Toggle help\n'
+            ' Ctrl-C: Cancel\n\n'
+            'In Textfields:\n'
+            + '\n'.join(' {}: {}'.format(k, v) for k, v
+                        in widgets.ExtendedEdit.HELP)
+        )
+
+    def _toggle_help(self):
+        if self._ui_content[-1] is self._help_text:
+            self._ui_content.pop()
+        else:
+            self._ui_content.append(self._help_text)
+        self._loop.draw_screen()
 
     def message(self, text):
         self._msg_text.set_text(text)
@@ -123,6 +146,11 @@ class TodoEditor:
         else:
             self.todo.due = None
 
+        if self.dtstart:
+            self.todo.start = self.formatter.unformat_date(self.dtstart)
+        else:
+            self.todo.start = None
+
         self.todo.is_completed = self._completed.get_state()
 
         # If it was already non-zero, keep it that way. Let's not overwrite
@@ -144,8 +172,8 @@ class TodoEditor:
         raise urwid.ExitMainLoop()
 
     def _keypress(self, key):
-        if key in ('q', 'Q'):
-            raise urwid.ExitMainLoop()
+        if key.lower() == 'f1':
+            self._toggle_help()
 
     @property
     def summary(self):
@@ -162,6 +190,10 @@ class TodoEditor:
     @property
     def due(self):
         return self._due.edit_text
+
+    @property
+    def dtstart(self):
+        return self._dtstart.edit_text
 
 
 class TodoFormatter:

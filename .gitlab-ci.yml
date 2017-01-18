@@ -26,17 +26,23 @@ py35:
   script:
     - tox -e py35
 
+py36:
+  stage: test
+  image: python:3.6
+  script:
+    - tox -e py36
+
+docs:
+  stage: test
+  image: python:3.6
+  script:
+    - tox -e docs
+
 flake8:
   image: python:latest
   stage: style
   script:
     - tox -e flake8
-
-isort:
-  image: python:latest
-  stage: style
-  script:
-    - tox -e isort
 
 wheel:
   image: python:3.5

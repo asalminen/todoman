@@ -3,10 +3,12 @@ import datetime
 import hypothesis.strategies as st
 import pytest
 import pytz
+from dateutil.tz import tzlocal
+from freezegun import freeze_time
 from hypothesis import given
 
 from todoman.cli import cli
-from todoman.model import Database, Todo
+from todoman.model import Database, FileTodo
 
 
 def test_basic(tmpdir, runner, create):
@@ -32,6 +34,12 @@ def test_percent(tmpdir, runner, create):
     result = runner.invoke(cli, ['list'])
     assert not result.exception
     assert '78%' in result.output
+
+
+def test_list_inexistant(tmpdir, runner, create):
+    result = runner.invoke(cli, ['list', 'nonexistant'])
+    assert result.exception
+    assert 'Error: Invalid value for "lists":' in result.output
 
 
 def test_show_existing(tmpdir, runner, create):
@@ -160,16 +168,15 @@ def test_dtstamp(tmpdir, runner, create):
     result = runner.invoke(cli, ['new', '-l', 'default', 'test event'])
     assert not result.exception
 
-    db = Database(str(tmpdir + '/default'))
-    todo = list(db.todos.values())[0]
+    db = Database([tmpdir.join('default')],
+                  tmpdir.join('/dtstamp_cache'))
+    todo = list(db.todos())[0]
     assert todo.dtstamp is not None
     assert todo.dtstamp.tzinfo is pytz.utc
 
 
 def test_default_list(tmpdir, runner, create):
-    """
-    Test the default_list config parameter
-    """
+    """Test the default_list config parameter"""
     result = runner.invoke(cli, ['new', 'test default list'])
     assert result.exception
 
@@ -179,9 +186,52 @@ def test_default_list(tmpdir, runner, create):
     result = runner.invoke(cli, ['new', 'test default list'])
     assert not result.exception
 
-    db = Database(str(tmpdir + '/default'))
-    todo = list(db.todos.values())[0]
+    db = Database([tmpdir.join('default')],
+                  tmpdir.join('/default_list'))
+    todo = list(db.todos())[0]
     assert todo.summary == 'test default list'
+
+
+@pytest.mark.parametrize(
+    'default_due, expected_due_hours', [(None, 24), (1, 1), (0, None)],
+    ids=['not specified', 'greater than 0', '0']
+)
+def test_default_due(
+    tmpdir, runner, create, default_due, expected_due_hours
+):
+    """Test setting the due date using the default_due config parameter"""
+    if default_due is not None:
+        path = tmpdir.join('config')
+        path.write('default_due = {}\n'.format(default_due), 'a')
+
+    runner.invoke(cli, ['new', '-l', 'default', 'aaa'])
+    db = Database([tmpdir.join('default')], tmpdir.join('/default_list'))
+    todo = list(db.todos())[0]
+
+    if expected_due_hours is None:
+        assert todo.due is None
+    else:
+        assert (todo.due - todo.created_at) == datetime.timedelta(
+            hours=expected_due_hours
+        )
+
+
+@freeze_time(datetime.datetime.now())
+def test_default_due2(tmpdir, runner, create, default_database):
+    cfg = tmpdir.join('config')
+    cfg.write('default_due = 24\n', 'a')
+
+    r = runner.invoke(cli, ['new', '-ldefault', '-dtomorrow', 'aaa'])
+    assert not r.exception
+    r = runner.invoke(cli, ['new', '-ldefault', 'bbb'])
+    assert not r.exception
+    r = runner.invoke(cli, ['new', '-ldefault', '-d', 'one hour', 'ccc'])
+    assert not r.exception
+
+    default_database.update_cache()
+    todos = {t.summary: t for t in default_database.todos(all=True)}
+    assert todos['aaa'].due.date() == todos['bbb'].due.date()
+    assert todos['ccc'].due == todos['bbb'].due - datetime.timedelta(hours=23)
 
 
 def test_sorting_fields(tmpdir, runner, default_database):
@@ -189,16 +239,29 @@ def test_sorting_fields(tmpdir, runner, default_database):
     for i in range(1, 10):
         days = datetime.timedelta(days=i)
 
-        todo = Todo()
+        todo = FileTodo(new=True)
+        todo.list = next(default_database.lists())
         todo.due = datetime.datetime.now() + days
         todo.created_at = datetime.datetime.now() - days
         todo.summary = 'harhar{}'.format(i)
         tasks.append(todo)
 
-        default_database.save(todo)
+        todo.save()
 
-    fields = tuple(field for field in dir(Todo) if not
-                   field.startswith('_'))
+    fields = (
+        'id',
+        'uid',
+        'summary',
+        'due',
+        'priority',
+        'created_at',
+        'completed_at',
+        'dtstamp',
+        'status',
+        'description',
+        'location',
+        'categories',
+    )
 
     @given(sort_key=st.lists(
         st.sampled_from(fields + tuple('-' + x for x in fields)),
@@ -268,7 +331,7 @@ def test_sorting_null_values(tmpdir, runner, create):
     assert 'aaa' in result.output.splitlines()[1]
 
 
-@pytest.mark.parametrize('hours', [1, -1])
+@pytest.mark.parametrize('hours', [72, -72])
 def test_color_due_dates(tmpdir, runner, create, hours):
     due = datetime.datetime.now() + datetime.timedelta(hours=hours)
     create(
@@ -282,13 +345,61 @@ def test_color_due_dates(tmpdir, runner, create, hours):
     result = runner.invoke(cli, ['--color', 'always'])
     assert not result.exception
     due_str = due.strftime('%Y-%m-%d')
-    if hours == 1:
+    if hours == 72:
         assert result.output == \
-            ' 1 [ ]   {} aaa @default\x1b[0m\n'.format(due_str)
+            '  1 [ ]   {} aaa @default\x1b[0m\n'.format(due_str)
     else:
         assert result.output == \
-            ' 1 [ ]   \x1b[31m{}\x1b[0m aaa @default\x1b[0m\n'.format(due_str)
+            '  1 [ ]   \x1b[31m{}\x1b[0m aaa @default\x1b[0m\n'.format(due_str)
 
+
+def test_flush(tmpdir, runner, create):
+    create(
+        'test.ics',
+        'SUMMARY:aaa\n'
+        'STATUS:COMPLETED\n'
+    )
+
+    result = runner.invoke(cli, ['list'])
+    assert not result.exception
+
+    create(
+        'test2.ics',
+        'SUMMARY:bbb\n'
+    )
+
+    result = runner.invoke(cli, ['list'])
+    assert not result.exception
+    assert '  2 [ ]              bbb @default' in result.output
+
+    result = runner.invoke(cli, ['flush'], input='y\n', catch_exceptions=False)
+    assert not result.exception
+
+    create(
+        'test2.ics',
+        'SUMMARY:bbb\n'
+    )
+
+    result = runner.invoke(cli, ['list'])
+    assert not result.exception
+    assert '  1 [ ]              bbb @default' in result.output
+
+
+def test_edit(runner, default_database):
+    todo = FileTodo()
+    todo.list = next(default_database.lists())
+    todo.summary = 'Eat paint'
+    todo.due = datetime.datetime(2016, 10, 3)
+    todo.save()
+
+    result = runner.invoke(cli, ['edit', '1', '--due', '2017-02-01'])
+    assert not result.exception
+    assert '2017-02-01' in result.output
+
+    default_database.update_cache()
+    todo = next(default_database.todos(all=True))
+    assert todo.due == datetime.datetime(2017, 2, 1, tzinfo=tzlocal())
+    assert todo.summary == 'Eat paint'
 
 # TODO: test aware/naive datetime sorting
 # TODO: test --grep

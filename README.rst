@@ -11,6 +11,10 @@ Todoman
   :target: https://travis-ci.org/pimutils/todoman
   :alt: Travis CI build status
 
+.. image:: https://codecov.io/gh/pimutils/todoman/branch/master/graph/badge.svg
+  :target: https://codecov.io/gh/pimutils/todoman
+  :alt: Codecov coverage report
+
 .. image:: https://readthedocs.org/projects/todoman/badge/
   :target: https://todoman.rtfd.org/
   :alt: documentation
@@ -20,7 +24,12 @@ Todoman
   :alt: version on pypi
 
 .. image:: https://img.shields.io/pypi/l/todoman.svg
+  :target: https://github.com/pimutils/todoman/blob/master/LICENCE
   :alt: licence
+
+.. image:: https://img.shields.io/badge/Say%20Thanks!-%F0%9F%A6%89-1EAEDB.svg
+  :target: https://saythanks.io/to/hobarrera
+  :alt: Say Thanks!
 
 Todoman is a simple, standards-based, cli todo (aka: task) manager. Todos
 are stored into `icalendar <https://tools.ietf.org/html/rfc5545>`_ files, which
@@ -46,9 +55,10 @@ Features
 Documentation
 -------------
 
-For detailed configuration, have a look at the latest docs at readthedocs_.
+For detailed usage, configuration and contributing documentation, please
+consult the latest version of the manual at readthedocs_.
 
-.. _readthedocs: https://todoman.rtfd.org/
+.. _readthedocs: https://todoman.readthedocs.org/
 
 LICENCE
 -------

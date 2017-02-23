@@ -1,4 +1,10 @@
+from datetime import datetime, timedelta
+
+import pytz
+from dateutil.tz import tzlocal
+
 from todoman.cli import cli
+from todoman.model import Database, FileTodo
 
 
 def test_all(tmpdir, runner, create):
@@ -136,3 +142,66 @@ def test_grep(tmpdir, runner, create):
     assert 'puppies' not in result.output
     assert 'research' not in result.output
     assert 'hoho' not in result.output
+
+
+def test_filtering_lists(tmpdir, runner, create):
+    tmpdir.mkdir('list_one')
+    tmpdir.mkdir('list_two')
+    tmpdir.mkdir('list_three')
+
+    runner.invoke(cli, ['new', '-l', 'list_one', 'todo one'])
+    runner.invoke(cli, ['new', '-l', 'list_two', 'todo two'])
+    runner.invoke(cli, ['new', '-l', 'list_three', 'todo three'])
+
+    result = runner.invoke(cli, ['new', 'list'])
+    assert len(result.output.splitlines()) == 3
+
+    result = runner.invoke(cli, ['list', 'list_two'])
+    assert not result.exception
+    assert len(result.output.splitlines()) == 1
+    assert 'todo two' in result.output
+
+
+def test_due_aware(tmpdir, runner, create):
+    now = datetime.now()
+
+    db = Database([tmpdir.join('default')], tmpdir.join('cache.sqlite'))
+    l = next(db.lists())
+
+    for tz in ['CET', 'HST']:
+        for i in [1, 23, 25, 48]:
+            todo = FileTodo()
+            todo.due = (now + timedelta(hours=i)).replace(tzinfo=tzlocal()) \
+                .astimezone(pytz.timezone(tz))
+            todo.summary = '{}'.format(i)
+
+            db.save(todo, l)
+
+    todos = list(db.todos(due=24))
+
+    assert len(todos) == 4
+    assert todos[0].summary == "23"
+    assert todos[1].summary == "23"
+    assert todos[2].summary == "1"
+    assert todos[3].summary == "1"
+
+
+def test_due_naive(tmpdir, runner, create):
+    now = datetime.now()
+
+    for i in [1, 23, 25, 48]:
+        due = now + timedelta(hours=i)
+        create(
+            'test_{}.ics'.format(i),
+            'SUMMARY:{}\n'
+            'DUE;VALUE=DATE-TIME:{}\n'.format(
+                i, due.strftime("%Y%m%dT%H%M%S"),
+            )
+        )
+
+    db = Database([tmpdir.join('default')], tmpdir.join('cache.sqlite'))
+    todos = list(db.todos(due=24))
+
+    assert len(todos) == 2
+    assert todos[0].summary == "23"
+    assert todos[1].summary == "1"

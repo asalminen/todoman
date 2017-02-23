@@ -1,4 +1,5 @@
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 from time import mktime
 
 import click
@@ -23,13 +24,13 @@ class TodoEditor:
     The UI for a single todo entry.
     """
 
-    def __init__(self, todo, databases, formatter):
+    def __init__(self, todo, lists, formatter):
         """
         :param model.Todo todo: The todo object which will be edited.
         """
 
         self.todo = todo
-        self.databases = databases
+        self.lists = lists
         self.formatter = formatter
         self.saved = EditState.none
         self._loop = None
@@ -90,7 +91,8 @@ class TodoEditor:
         self._help_text = urwid.Text(
             '\n\nGlobal:\n'
             ' F1: Toggle help\n'
-            ' Ctrl-C: Cancel\n\n'
+            ' Ctrl-C: Cancel\n'
+            ' Ctrl-S: Save (only works if not a shell shortcut already)\n\n'
             'In Textfields:\n'
             + '\n'.join(' {}: {}'.format(k, v) for k, v
                         in widgets.ExtendedEdit.HELP)
@@ -128,7 +130,7 @@ class TodoEditor:
         self._loop = None
         return self.saved
 
-    def _save(self, btn):
+    def _save(self, btn=None):
         try:
             self._save_inner()
         except Exception as e:
@@ -141,15 +143,8 @@ class TodoEditor:
         self.todo.summary = self.summary
         self.todo.description = self.description
         self.todo.location = self.location
-        if self.due:
-            self.todo.due = self.formatter.unformat_date(self.due)
-        else:
-            self.todo.due = None
-
-        if self.dtstart:
-            self.todo.start = self.formatter.unformat_date(self.dtstart)
-        else:
-            self.todo.start = None
+        self.todo.due = self.formatter.parse_date(self.due)
+        self.todo.start = self.formatter.parse_date(self.dtstart)
 
         self.todo.is_completed = self._completed.get_state()
 
@@ -174,6 +169,8 @@ class TodoEditor:
     def _keypress(self, key):
         if key.lower() == 'f1':
             self._toggle_help()
+        elif key == 'ctrl s':
+            self._save()
 
     @property
     def summary(self):
@@ -200,21 +197,28 @@ class TodoFormatter:
 
     # This one looks good with [X]
     compact_format = \
-        "[{completed}] {summary} {urgent} {due} {percent}"
-    # compact_format = "{completed} {urgent}  {due}  {summary}"
+        "{id:3d} [{completed}] {summary} {urgent} {due} {list}{percent}"
 
-    def __init__(self, date_format, human_time):
-        self.human_time = human_time
+    def __init__(self, date_format):
         self.date_format = date_format
         self._localtimezone = tzlocal()
         self.now = datetime.now().replace(tzinfo=self._localtimezone)
         # self.empty_date = " " * len(self.format_date(self.now))
-        self.empty_date = ""
+        #self.empty_date = ""
 
-        if human_time:
-            self._parsedatetime_calendar = parsedatetime.Calendar()
+        self.tomorrow = self.now.date() + timedelta(days=1)
 
-    def compact(self, todo, database):
+        # An empty date which should be used in case no date is present
+        self.date_width = len(self.now.strftime(date_format))
+        self.empty_date = " " * self.date_width
+        # Map special dates to the special string we need to return
+        self.special_dates = {
+            self.now.date(): "Today".rjust(self.date_width, " "),
+            self.tomorrow: "Tomorrow".rjust(self.date_width, " "),
+        }
+        self._parsedatetime_calendar = parsedatetime.Calendar()
+
+    def compact(self, todo):
         """
         Returns a brief representation of a task, suitable for displaying
         on-per-line.
@@ -233,19 +237,25 @@ class TodoFormatter:
             due = click.style(due, fg='red')
 
         summary = todo.summary
-        list = self.format_database(database)
+        list = self.format_database(todo.list)
 
-        return self.compact_format.format(completed=completed, urgent=urgent,
-                                          due=due, summary=summary, list=list,
-                                          percent=percent)
+        return self.compact_format.format(
+            completed=completed,
+            due=due,
+            id=todo.id,
+            list=list,
+            percent=percent,
+            summary=summary,
+            urgent=urgent,
+        )
 
-    def detailed(self, todo, database):
+    def detailed(self, todo):
         """
         Returns a detailed representation of a task.
 
         :param Todo todo: The todo component.
         """
-        rv = self.compact(todo, database)
+        rv = self.compact(todo)
         if todo.description:
             rv = "{}\n".format(rv)
             lines = todo.description.split('\n')
@@ -254,31 +264,65 @@ class TodoFormatter:
         return rv
 
     def format_date(self, date):
+        """
+        Returns date in the following format:
+        * if date == today or tomorrow: "Today" or "Tomorrow"
+        * else: return a string representing that date
+        * if no date is supplied, it returns empty_date
+
+        :param datetime.datetime date: a datetime object
+        """
         if date:
-            rv = date.strftime(self.date_format)
+            assert isinstance(date, datetime)
+            if date.date() in self.special_dates:
+                rv = self.special_dates[date.date()]
+            else:
+                rv = date.strftime(self.date_format)
             return rv
         else:
             return self.empty_date
 
-    def unformat_date(self, date):
-        if date:
-            try:
-                rv = datetime.strptime(date, self.date_format)
-            except ValueError:
-                if not self.human_time:
-                    raise
-
-                rv, certainty = self._parsedatetime_calendar.parse(date)
-                if not certainty:
-                    raise ValueError('Time description not recognized: {}'
-                                     .format(date))
-                rv = datetime.fromtimestamp(mktime(rv))
-
-            return rv.replace(tzinfo=self._localtimezone)
-
-        else:
+    def parse_date(self, date):
+        if not date:
             return None
+
+        try:
+            rv = datetime.strptime(date, self.date_format)
+        except ValueError:
+            rv, certainty = self._parsedatetime_calendar.parse(date)
+            if not certainty:
+                raise ValueError(
+                    'Time description not recognized: {}' .format(date)
+                )
+            rv = datetime.fromtimestamp(mktime(rv))
+
+        return rv.replace(tzinfo=self._localtimezone)
 
     def format_database(self, database):
         return '{}@{}'.format(database.color_ansi or '',
                               click.style(database.name))
+
+
+class PorcelainFormatter:
+
+    def compact(self, todo):
+        data = dict(
+            completed=todo.is_completed,
+            due=self.format_date(todo.due),
+            id=todo.id,
+            list=todo.list.name,
+            percent=todo.percent_complete,
+            summary=todo.summary,
+            # XXX: Move this into Todo itself and dedupe it
+            urgent=todo.priority not in [None, 0],
+        )
+
+        return json.dumps(data, sort_keys=True)
+
+    detailed = compact
+
+    def format_date(self, date):
+        if date:
+            return int(date.timestamp())
+        else:
+            return None
